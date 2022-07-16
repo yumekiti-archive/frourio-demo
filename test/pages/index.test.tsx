@@ -1,69 +1,63 @@
-import dotenv from 'dotenv'
-import Fastify, { FastifyInstance } from 'fastify'
-import cors from '@fastify/cors'
-import aspida from '@aspida/axios'
-import api from '$/api/$api'
-import Home from '~/pages/index'
-import { render, fireEvent, waitFor } from '../testUtils'
+import useAspidaSWR from '@aspida/swr'
+import { NextPage } from 'next'
+import { useRouter } from 'next/router'
+import Head from 'next/head'
+import Link from 'next/link'
+import Layout from '~/components/Layout'
+import { pagesPath } from '~/utils/$path'
+import { apiClient } from '~/utils/apiClient'
 
-dotenv.config({ path: 'server/.env' })
-
-const apiClient = api(aspida(undefined, { baseURL: process.env.API_BASE_PATH }))
-const res = function <T extends () => any>(
-  data: ReturnType<T> extends Promise<infer S> ? S : never
-) {
-  return data
+export type OptionalQuery = {
+  search: string
 }
 
-let fastify: FastifyInstance
-
-beforeAll(() => {
-  fastify = Fastify()
-  fastify.register(cors)
-  fastify.get(apiClient.tasks.$path(), (_, reply) => {
-    reply.send(
-      res<typeof apiClient.tasks.$get>([
-        { id: 1, label: 'foo task', done: false },
-        { id: 2, label: 'bar task', done: true }
-      ])
-    )
+const ArticleList: NextPage = () => {
+  const router = useRouter()
+  const query = router.query as Partial<OptionalQuery>
+  const search = query.search ? query.search.trim() : ''
+  const { data: articleList } = useAspidaSWR(apiClient.article, {
+    query: { search }
   })
+  return (
+    <Layout>
+      <Head>
+        <title>Articles</title>
+      </Head>
+      <h1>Articles</h1>
+      {articleList ? (
+        articleList.length ? (
+          <>
+            {search && (
+              <span>
+                Results for <code>{search}</code>.
+              </span>
+            )}
+            <ul>
+              {articleList.map((article) => (
+                <li key={article.id}>
+                  <Link
+                    href={pagesPath.article.entry.$url({
+                      query: { id: article.id }
+                    })}
+                  >
+                    {article.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          search && (
+            <span>
+              Not found for <code>{search}</code>.
+            </span>
+          )
+        )
+      ) : (
+        <span>Loading...</span>
+      )}
+    </Layout>
+  )
+}
 
-  return fastify.listen(process.env.API_SERVER_PORT ?? 8080)
-})
-
-afterAll(() => fastify.close())
-
-describe('Home page', () => {
-  it('shows tasks', async () => {
-    const { findByText } = render(<Home />)
-
-    await waitFor(
-      async () => {
-        await findByText('foo task')
-      },
-      { timeout: 5000 }
-    )
-    expect(await findByText('foo task')).toBeTruthy()
-    expect(await findByText('bar task')).toBeTruthy()
-  })
-
-  it('clicking button triggers prompt', async () => {
-    const { findByText } = render(<Home />)
-
-    window.prompt = jest.fn()
-    window.alert = jest.fn()
-
-    await waitFor(
-      async () => {
-        await findByText('LOGIN')
-      },
-      { timeout: 5000 }
-    )
-    fireEvent.click(await findByText('LOGIN'))
-    expect(window.prompt).toHaveBeenCalledWith(
-      'Enter the user id (See server/.env)'
-    )
-    expect(window.alert).toHaveBeenCalledWith('Login failed')
-  })
-})
+export default ArticleList
