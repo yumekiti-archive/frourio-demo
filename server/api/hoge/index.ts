@@ -1,4 +1,4 @@
-import { Hoge } from "$/types"
+import { Hoge } from '$/types'
 
 export type Methods = {
   get: {
